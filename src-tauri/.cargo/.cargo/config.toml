@@ -1,0 +1,6 @@
+[env]
+QINIU_ACCESS_KEY = "KdML1GKlZYuSx-ER4pTSFv2hx01wIjmDVf8lWsbQ"
+QINIU_SECRET_KEY = "x7MDpJ_3Ylyvx4vlcHmc6H5tcav-m0nmemjl_ZFU"
+QINIU_BUCKET = "chouxiaoya1"
+QINIU_DOMAIN = "xiaoya.aixiaoxi.top"
+DEEPSEEK_API_KEY = "placeholder"

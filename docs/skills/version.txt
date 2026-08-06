@@ -1,0 +1,6 @@
+name: xiaoya-ai-cinema-fashion
+version=1.0.0
+description: 小鸭AI服饰短视频提示词 — 服饰行业AI短视频制作专家
+release_date: 2026-08-05
+changelog: |
+  v1.0.0 — 初始版本：服饰行业专属SKILL，T台走秀/穿搭展示/细节特写/一衣多穿/LOOKBOOK/面料动态六大视频类型
