@@ -867,7 +867,7 @@ pub(crate) async fn sync_xiaoya_skill_public(skills_dir: &std::path::Path) {
 async fn sync_xiaoya_skill(skills_dir: &std::path::Path) {
     let target_dir = skills_dir.join("xiaoya-ai-cinema-fashion");
     let local_version_path = target_dir.join("version.txt");
-    let version_url = format!("{}/jy/uploads/install_guide/files/version_travel.txt", BANANA_API_BASE_URL);
+    let version_url = format!("{}/jy/uploads/install_guide/files/version_fashion.txt", BANANA_API_BASE_URL);
 
     // 版本检查：本地已存在时，对比服务器版本决定是否更新
     if target_dir.exists() && local_version_path.exists() {
