@@ -49,10 +49,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": {
-      "resources/realesrgan/": "realesrgan/",
-      "resources/ffmpeg/": "ffmpeg/"
-    },
     "macOS": {
       "minimumSystemVersion": "10.15"
     },
