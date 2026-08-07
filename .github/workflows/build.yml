@@ -55,6 +55,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download macOS ffmpeg for bundling
+        run: |
+          mkdir -p src-tauri/resources/ffmpeg
+          # Download static ffmpeg & ffprobe (Intel, runs on Apple Silicon via Rosetta 2)
+          curl -sL "https://evermeet.cx/ffmpeg/ffmpeg-125991-ga81b23a85ac.zip" -o /tmp/ffmpeg-macos.zip
+          curl -sL "https://evermeet.cx/ffmpeg/ffprobe-125991-ga81b23a85ac.zip" -o /tmp/ffprobe-macos.zip
+          unzip -o /tmp/ffmpeg-macos.zip -d src-tauri/resources/ffmpeg/
+          unzip -o /tmp/ffprobe-macos.zip -d src-tauri/resources/ffmpeg/
+          chmod +x src-tauri/resources/ffmpeg/ffmpeg src-tauri/resources/ffmpeg/ffprobe
+          echo "ffmpeg binary type: $(file src-tauri/resources/ffmpeg/ffmpeg)"
+          ls -lh src-tauri/resources/ffmpeg/ffmpeg src-tauri/resources/ffmpeg/ffprobe
+
       - name: Build application (Universal Binary)
         env:
           CC: ""
