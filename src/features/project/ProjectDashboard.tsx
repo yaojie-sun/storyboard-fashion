@@ -108,7 +108,7 @@ export function ProjectDashboard() {
         if (paramsProject.aspectRatio) parts.push(`- 画幅比例: ${paramsProject.aspectRatio}`);
         if (paramsProject.style) parts.push(`- 视觉风格: ${paramsProject.style}`);
         if (paramsProject.tone) parts.push(`- 项目调性: ${paramsProject.tone}`);
-        if (paramsProject.directorRef) parts.push(`- 旅行视频风格: ${paramsProject.directorRef}`);
+        if (paramsProject.directorRef) parts.push(`- 视频风格: ${paramsProject.directorRef}`);
         const emphasisLabels = getEmphasisLabels(paramsProject.emphasisDimensions.filter((d) => d.enabled).map((d) => d.key));
         if (emphasisLabels.length > 0) {
           parts.push(`- 提示词重点维度: ${emphasisLabels.join('、')}`);

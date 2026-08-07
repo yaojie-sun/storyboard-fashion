@@ -151,7 +151,7 @@ export function ReanalyzeDialog({ isOpen, onClose, projectId }: ReanalyzeDialogP
         if (current.aspectRatio) parts.push(`- 画幅比例: ${current.aspectRatio}`);
         if (current.style) parts.push(`- 视觉风格: ${current.style}`);
         if (current.tone) parts.push(`- 项目调性: ${current.tone}`);
-        if (current.directorRef) parts.push(`- 旅行视频风格: ${current.directorRef}`);
+        if (current.directorRef) parts.push(`- 视频风格: ${current.directorRef}`);
         const emphasisLabels = getEmphasisLabels(current.emphasisDimensions.filter((d) => d.enabled).map((d) => d.key));
         if (emphasisLabels.length > 0) {
           parts.push(`- 提示词重点维度: ${emphasisLabels.join('、')}`);
@@ -249,7 +249,7 @@ export function ReanalyzeDialog({ isOpen, onClose, projectId }: ReanalyzeDialogP
               </div>
 
               <div>
-                <label className={labelClass}>旅行视频风格</label>
+                <label className={labelClass}>视频风格</label>
                 <PresetPicker presets={FASHION_STYLE_PRESETS} value={directorRef} onChange={setDirectorRef} placeholder="输入自定义风格..." />
               </div>
 

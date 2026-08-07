@@ -824,7 +824,7 @@ pub fn generate_project_globals_md(
         content.push_str(&format!("- 项目调性: {}\n", tone));
     }
     if !director_ref.is_empty() {
-        content.push_str(&format!("- 旅行视频风格: {}\n", director_ref));
+        content.push_str(&format!("- 视频风格: {}\n", director_ref));
     }
 
     // Add emphasis dimensions

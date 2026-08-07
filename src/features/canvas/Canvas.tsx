@@ -513,7 +513,7 @@ export function Canvas() {
         if (project.aspectRatio) parts.push(`- 画幅比例: ${project.aspectRatio}`);
         if (project.style) parts.push(`- 视觉风格: ${project.style}`);
         if (project.tone) parts.push(`- 项目调性: ${project.tone}`);
-        if (project.directorRef) parts.push(`- 旅行视频风格: ${project.directorRef}`);
+        if (project.directorRef) parts.push(`- 视频风格: ${project.directorRef}`);
         const emphasisLabels = getEmphasisLabels(project.emphasisDimensions.filter((d) => d.enabled).map((d) => d.key));
         if (emphasisLabels.length > 0) {
           parts.push(`- 提示词重点维度: ${emphasisLabels.join('、')}`);

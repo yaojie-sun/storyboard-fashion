@@ -138,7 +138,7 @@ export function EditParamsDialog({ isOpen, onClose, onConfirm, initial }: EditPa
 
         {/* Short Video Style */}
         <div className="mb-4">
-          <label className={labelClass}>旅行视频风格</label>
+          <label className={labelClass}>视频风格</label>
           <PresetPicker presets={FASHION_STYLE_PRESETS} value={directorRef} onChange={setDirectorRef} placeholder="输入自定义风格..." />
         </div>
 

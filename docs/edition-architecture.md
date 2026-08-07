@@ -122,7 +122,7 @@ Story-Travel/                         ← 基础代码库（共享组件/Store/P
     "emphasisDimensions": [
       { "key": "drone_aerial", "label": "航拍运镜", "desc": "..." }
     ],
-    "industryLabel": "旅行视频风格"
+    "industryLabel": "视频风格"
   },
 
   // ── i18n 覆盖 ──

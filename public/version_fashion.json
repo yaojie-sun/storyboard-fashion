@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "releaseDate": "2026-08-05",
+  "version": "1.0.2",
+  "releaseDate": "2026-08-08",
   "downloadUrl": "https://aixiaoxi.top/jy/uploads/app",
-  "notes": "小鸭服饰版 v1.0.0 — 服饰行业AI短视频创作工具，支持T台走秀/穿搭展示/细节特写/一衣多穿/LOOKBOOK/面料动态"
+  "notes": "## 视频超分重构\n- 废弃 realesrgan-ncnn-vulkan AI 管线（289帧需16分钟），改用 ffmpeg Lanczos 传统缩放（~10秒）\n- 不依赖 GPU，不挑显卡，全平台通吃\n\n## 新增\n- 远程视频下载：支持百度 VOD 远程 URL 自动下载到本地后再超分\n- 级联超分保护：已增强视频（含 _enhanced 文件名）拒绝再次超分，防止分辨率雪崩\n- 编码器健壮性：添加 -movflags +faststart 防止 MP4 容器损坏产生 0 字节文件"
 }

@@ -181,15 +181,37 @@ npm run release -- patch --notes-file docs/releases/v1.0.1.md
 
 ```bash
 # 示例
-scp "小鸭服饰版_1.0.1_x64-setup.exe" root@47.108.237.10:/jy/uploads/app/
-ssh root@47.108.237.10 "cp /jy/uploads/app/小鸭服饰版_1.0.1_x64-setup.exe /jy/uploads/app/Storyboard-Fashion_1.0.1_x64-setup.exe"
+scp "小鸭服饰版_1.0.2_x64-setup.exe" root@47.108.237.10:/jy/uploads/app/
+ssh root@47.108.237.10 "cp '/jy/uploads/app/小鸭服饰版_1.0.2_x64-setup.exe' /jy/uploads/app/Storyboard-Fashion_1.0.2_x64-setup.exe"
 scp version_fashion.json root@47.108.237.10:/jy/uploads/app/
 ```
 
-#### 步骤 7：验证
+#### 步骤 7：更新用户下载页
+
+更新 `http://47.108.237.10/jy/uploads/install_guide/industry.html` 中的版本号和下载链接。
+
+```bash
+# 1. 拉取页面
+ssh root@47.108.237.10 "cat /jy/uploads/install_guide/industry.html" > /tmp/industry.html
+
+# 2. 替换版本号和下载链接
+sed -i 's/Storyboard-Fashion_[0-9.]*_x64-setup\.exe/Storyboard-Fashion_1.0.2_x64-setup.exe/g' /tmp/industry.html
+sed -i 's/下载 Windows 版 &middot; v[0-9.]*/下载 Windows 版 \&middot\; v1.0.2/g' /tmp/industry.html
+
+# 3. 上传
+scp /tmp/industry.html root@47.108.237.10:/jy/uploads/install_guide/industry.html
+
+# 4. 验证
+ssh root@47.108.237.10 "grep 'Fashion_1.0.2' /jy/uploads/install_guide/industry.html"
+```
+
+> **注意**：只更新服饰版（Fashion Edition）的链接，不要改动旅游版等其他行业的版本号。
+
+#### 步骤 8：验证
 
 1. 旧版本客户端启动 → 弹升级对话框 → 下载安装验证完整链路
 2. 浏览器访问 `https://aixiaoxi.top/jy/uploads/app/version_fashion.json` → 确认版本号
+3. 浏览器访问 `http://47.108.237.10/jy/uploads/install_guide/industry.html` → 确认下载页版本号
 
 ---
 

@@ -525,7 +525,7 @@ pub(crate) async fn analyze_story(
         user_content.push_str(&format!("项目调性: {}\n", tone));
     }
     if !director_ref.is_empty() {
-        user_content.push_str(&format!("旅行视频风格: {}\n", director_ref));
+        user_content.push_str(&format!("视频风格: {}\n", director_ref));
     }
     if !emphasis_dimensions.is_empty() {
         user_content.push_str(&format!("提示词重点维度: {}\n", emphasis_dimensions.join(", ")));
