@@ -3,6 +3,10 @@ use std::process::Command;
 use tauri::{AppHandle, Manager};
 use tracing::info;
 
+/// Maximum file size for enhanced images before auto-compression kicks in (40MB).
+/// Baidu VOD rejects base64 payloads over ~50MB, so we keep well under that.
+const MAX_ENHANCED_FILE_SIZE: u64 = 40 * 1024 * 1024;
+
 /// 规范化图片路径：处理 asset:// localhost 和 file:// 前缀
 fn normalize_image_path(raw: &str) -> String {
     let decoded = raw.trim_start_matches("file://");
@@ -49,6 +53,71 @@ fn resolve_binary(resource_dir: &PathBuf, dir: &str, exe: &str) -> Result<PathBu
                     .join("\n")
             )
         })
+}
+
+/// Compress an image file to JPEG if it exceeds `max_size`.
+/// Returns the path to use (original if small enough, compressed JPEG otherwise).
+/// Tries quality levels 85→70→55→40 until the file fits under the limit.
+fn ensure_enhanced_file_size(path: PathBuf, max_size: u64) -> Result<PathBuf, String> {
+    let metadata = std::fs::metadata(&path)
+        .map_err(|e| format!("无法读取文件信息: {}", e))?;
+
+    if metadata.len() <= max_size {
+        return Ok(path);
+    }
+
+    let original_size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
+    info!(
+        "[Enhance] 输出文件 {:.1}MB 超过限制 {}MB，自动压缩...",
+        original_size_mb,
+        max_size / 1024 / 1024
+    );
+
+    let img = image::open(&path)
+        .map_err(|e| format!("无法打开图片进行压缩: {}", e))?;
+
+    let compressed_path = path.with_file_name(format!(
+        "{}_compressed.jpg",
+        path.file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+    ));
+
+    for quality in [85u8, 70, 55, 40] {
+        let file = std::fs::File::create(&compressed_path)
+            .map_err(|e| format!("无法创建压缩文件: {}", e))?;
+        let mut writer = std::io::BufWriter::new(file);
+
+        let mut encoder =
+            image::codecs::jpeg::JpegEncoder::new_with_quality(&mut writer, quality);
+        encoder
+            .encode_image(&img)
+            .map_err(|e| format!("JPEG 编码失败: {}", e))?;
+
+        let compressed_size = std::fs::metadata(&compressed_path)
+            .map_err(|e| format!("无法读取压缩文件: {}", e))?
+            .len();
+        let size_mb = compressed_size as f64 / (1024.0 * 1024.0);
+
+        if compressed_size <= max_size {
+            info!(
+                "[Enhance] 压缩完成: {:.1}MB (quality={}) → {}",
+                original_size_mb,
+                quality,
+                compressed_path.display()
+            );
+            return Ok(compressed_path);
+        }
+        info!(
+            "[Enhance] quality={} → {:.1}MB 仍超标，降低质量重试...",
+            quality, size_mb
+        );
+    }
+
+    Err(format!(
+        "图片压缩后仍超过{}MB限制，请降低超分倍数",
+        max_size / 1024 / 1024
+    ))
 }
 
 /// 使用 realesrgan-ncnn-vulkan 对图片进行本地超分
@@ -163,7 +232,10 @@ pub async fn enhance_image(
         return Err("超分完成但未生成输出文件".to_string());
     }
 
-    let output_str = output.to_string_lossy().to_string();
+    // 自动压缩：4K PNG 可能超过 50MB（Baidu VOD 限制），
+    // 如果超标则降级为 JPEG 并调整质量直到达标
+    let final_path = ensure_enhanced_file_size(output, MAX_ENHANCED_FILE_SIZE)?;
+    let output_str = final_path.to_string_lossy().to_string();
     info!("[Enhance] 超分完成: {}", output_str);
 
     Ok(output_str)
