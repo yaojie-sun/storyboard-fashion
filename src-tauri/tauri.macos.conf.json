@@ -1,7 +1,5 @@
 {
   "bundle": {
-    "resources": {
-      "resources/ffmpeg/": "ffmpeg/"
-    }
+    "resources": ["resources/ffmpeg/**"]
   }
 }
