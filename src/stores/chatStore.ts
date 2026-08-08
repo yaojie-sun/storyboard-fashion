@@ -144,11 +144,23 @@ function parseGridFrames(gridContent: string): PromptBlockFrame[] {
 
   const postFrameRe = /^(?:[-—]{3,}|\*\*说明|跨格一致性|一致性检查|动作连贯)/;
 
-  for (const para of paragraphs) {
-    const text = para.trim();
+  // Preamble/intro detection: first paragraph that looks like a grid summary
+  // rather than a frame description should be skipped.
+  // Matches: "2×3六宫格，9:16竖屏，街头潮流女装展示。温暖日光..."
+  // Key markers: 宫格 count, 竖屏/横屏, aspect ratio, style/tone summary
+  const preambleRe = /^\d+\s*[×xX]\s*\d+\s*(?:六?宫格|宫格|格)|^(?:2×3|3×3|2×2|2×4|3×2)\b|^(?=.*(?:竖屏|横屏|方屏)).*(?:宫格|分镜)/;
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const text = paragraphs[i].trim();
     if (!text) continue;
     if (postFrameRe.test(text)) break;
     if (/^(?:复制以上|打开.*分镜大师|粘贴生成|如需进一步|请告诉我)/.test(text)) break;
+
+    // Skip preamble paragraph if it looks like a grid summary intro
+    // (first paragraph only — subsequent ones are real frames)
+    if (i === 0 && frames.length === 0 && preambleRe.test(text)) {
+      continue;
+    }
 
     // Strip any frame prefix: N. / N、/ 第N格： / 场景N： / etc.
     let desc = text
