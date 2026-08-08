@@ -277,15 +277,26 @@ function parseGridPrompt(prompt: string, maxFrames: number): string[] {
 
   // Strategy 2: fallback — split by double newlines
   const paraSplit = trimmed.split(/\n\s*\n/).filter((s) => s.trim());
+
+  // Filter out preamble/intro paragraphs that describe the grid format rather than a frame.
+  // Matches: "2×3六宫格，9:16竖屏，街头潮流女装展示。温暖日光..."
+  const preambleRe = /^\d+\s*[×xX]\s*\d+\s*(?:六?宫格|宫格|格)|^(?:2×3|3×3|2×2|2×4|3×2)\b|^(?=.*(?:竖屏|横屏|方屏)).*(?:宫格|分镜)/;
+
   if (paraSplit.length >= 2) {
-    const clean = paraSplit.map((s) => s.trim()).filter(Boolean);
+    const clean = paraSplit
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s, i) => !(i === 0 && preambleRe.test(s)));
     return clean.slice(0, maxFrames).concat(Array.from({ length: Math.max(0, maxFrames - clean.length) }, () => ''));
   }
 
-  // Strategy 3: fallback — split by single newlines
+  // Strategy 3: fallback — split by single newlines (also filter preamble)
   const lineSplit = trimmed.split('\n').filter((s) => s.trim());
   if (lineSplit.length >= 2) {
-    const clean = lineSplit.map((s) => s.trim()).filter(Boolean);
+    const clean = lineSplit
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s, i) => !(i === 0 && preambleRe.test(s)));
     return clean.slice(0, maxFrames).concat(Array.from({ length: Math.max(0, maxFrames - clean.length) }, () => ''));
   }
 
