@@ -1,6 +1,6 @@
 [package]
 name = "storyboard-fashion"
-version = "1.0.2"
+version = "1.0.3"
 description = "分镜大师服饰版 - 服饰行业AI短视频生成工具"
 authors = ["you"]
 edition = "2021"
