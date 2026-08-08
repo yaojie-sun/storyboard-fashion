@@ -379,6 +379,12 @@ pub async fn enhance_video(
         .unwrap_or(&resource_dir)
         .join(ffprobe_binary_name);
 
+    // 获取源视频分辨率：优先 ffprobe，回退 ffmpeg -i 解析 stderr
+    info!(
+        "[EnhanceVideo] ffprobe_path={} exists={}",
+        ffprobe_path.display(),
+        ffprobe_path.exists()
+    );
     let (src_w, src_h): (u32, u32) = if ffprobe_path.exists() {
         hidden_command(&ffprobe_path)
             .arg("-v")
@@ -401,7 +407,50 @@ pub async fn enhance_video(
             })
             .unwrap_or((1920, 1080))
     } else {
-        (1920, 1080)
+        // ffprobe 不可用时，用 ffmpeg -i 解析视频流信息
+        match hidden_command(&ffmpeg_binary)
+            .arg("-i")
+            .arg(input_path.to_string_lossy().as_ref())
+            .output()
+        {
+            Ok(out) => {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                info!("[EnhanceVideo] ffmpeg -i stderr len={}", stderr.len());
+                // 匹配 "Stream #0:0 ... Video: ... 720x1280 ..."
+                // 注意：stream id 含 0x1 十六进制，必须 filter_map 只取数字x数字
+                let mut found: Option<(u32, u32)> = None;
+                for line in stderr.lines() {
+                    if line.contains("Video:") {
+                        found = line.split_whitespace()
+                            .filter_map(|tok| {
+                                if tok.chars().filter(|c| *c == 'x').count() != 1 { return None; }
+                                let cleaned = tok.trim_matches(',');
+                                let mut parts = cleaned.split('x');
+                                let w: u32 = parts.next()?.parse().ok()?;
+                                let h: u32 = parts.next()?.parse().ok()?;
+                                // 十六进制如 0x31637661 → height 会是 8 位数
+                                if h >= 10_000_000 { return None; }
+                                info!("[EnhanceVideo] ffmpeg fallback parsed: {}x{}", w, h);
+                                Some((w, h))
+                            })
+                            .next();
+                        if found.is_some() {
+                            break;
+                        }
+                        info!("[EnhanceVideo] Video line found but no valid resolution token: {}", line);
+                    }
+                }
+                if found.is_none() {
+                    info!("[EnhanceVideo] stderr had no Video line with valid resolution, sample: {}",
+                        &stderr[..std::cmp::min(500, stderr.len())]);
+                }
+                found
+            }
+            Err(e) => {
+                info!("[EnhanceVideo] ffmpeg -i failed: {}, fallback to default", e);
+                None
+            }
+        }.unwrap_or((1920, 1080))
     };
     info!("[EnhanceVideo] 源分辨率: {}x{}", src_w, src_h);
 
@@ -417,7 +466,7 @@ pub async fn enhance_video(
         output.display()
     );
 
-    // 5. ffmpeg Lanczos scale + 编码（libopenh264 通用软件编码，不挑显卡）
+    // 5. ffmpeg Lanczos scale + 编码（libx264 通用软件编码，不挑显卡）
     let scale_filter = format!(
         "scale={}:{}:flags=lanczos",
         target_w, target_h
@@ -429,7 +478,7 @@ pub async fn enhance_video(
         .arg("-vf")
         .arg(&scale_filter)
         .arg("-c:v")
-        .arg("libopenh264")
+        .arg("libx264")
         .arg("-b:v")
         .arg("50M")
         .arg("-c:a")
