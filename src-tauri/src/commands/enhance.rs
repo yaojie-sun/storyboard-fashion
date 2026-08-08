@@ -3,6 +3,18 @@ use std::process::Command;
 use tauri::{AppHandle, Manager};
 use tracing::info;
 
+/// 创建隐藏窗口的 Command（Windows 上禁止弹出 CMD 窗口）
+fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Maximum file size for enhanced images before auto-compression kicks in (40MB).
 /// Baidu VOD rejects base64 payloads over ~50MB, so we keep well under that.
 const MAX_ENHANCED_FILE_SIZE: u64 = 40 * 1024 * 1024;
@@ -204,7 +216,7 @@ pub async fn enhance_image(
         model
     );
 
-    let result = Command::new(&binary_path)
+    let result = hidden_command(&binary_path)
         .arg("-i")
         .arg(normalized_path)
         .arg("-o")
@@ -368,7 +380,7 @@ pub async fn enhance_video(
         .join(ffprobe_binary_name);
 
     let (src_w, src_h): (u32, u32) = if ffprobe_path.exists() {
-        Command::new(&ffprobe_path)
+        hidden_command(&ffprobe_path)
             .arg("-v")
             .arg("error")
             .arg("-select_streams")
@@ -411,7 +423,7 @@ pub async fn enhance_video(
         target_w, target_h
     );
 
-    let merge = Command::new(&ffmpeg_binary)
+    let merge = hidden_command(&ffmpeg_binary)
         .arg("-i")
         .arg(input_path.to_string_lossy().as_ref())
         .arg("-vf")
