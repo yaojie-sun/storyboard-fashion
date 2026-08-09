@@ -51,6 +51,7 @@ macos-build/
 *.dmg
 *.exe
 version.json
+version_fashion.json
 skills-lock.json
 .playwright-mcp/
 
