@@ -94,7 +94,8 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const copyErrorFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const downloadMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imageSource = useMemo(() => {
-    if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node)) {
+    if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node)
+        || isStoryboardGenNode(node) || isStoryboardSplitNode(node)) {
       return node.data.imageUrl || node.data.previewImageUrl || null;
     }
     return null;
