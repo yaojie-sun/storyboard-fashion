@@ -72,8 +72,10 @@ reference/
 # Icons exclusion was blocking macOS build - icons are required by Tauri
 # icons/ (removed - src-tauri/icons are build-essential)
 
-# External binaries for enhance feature (local only, CI downloads its own)
-src-tauri/resources/
+# External binaries for enhance feature — realesrgan tracked via Git LFS; ffmpeg stays local-only
+src-tauri/resources/ffmpeg/
+# realesrgan exe exempt from the global *.exe ignore above
+!src-tauri/resources/realesrgan/realesrgan-ncnn-vulkan.exe
 
 # Exclude old release notes and dev docs (contain credential patterns)
 docs/xiugai*.md
