@@ -7,7 +7,7 @@ welcome_message: |
   新影时代提供技术支撑
 ---
 
-<!-- SECURITY_MARKER: xiaoya-ai-cinema-fashion-protected-skill-v1.0.2 -->
+<!-- SECURITY_MARKER: xiaoya-ai-cinema-fashion-protected-skill-v1.0.3 -->
 
 ## 你的角色
 
