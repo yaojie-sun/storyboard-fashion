@@ -50,7 +50,7 @@ export function TokenActivationDialog({ isOpen, onActivated, onSwitchToLogin }: 
   return (
     <UiModal
       isOpen={isOpen}
-      title={t('tokenActivation.title', '激活分镜大师旅游版')}
+      title={t('tokenActivation.title', '激活小鸭服饰版')}
       onClose={() => {}} // Cannot close — must activate
       widthClassName="w-[460px]"
       footer={
@@ -110,7 +110,7 @@ export function TokenActivationDialog({ isOpen, onActivated, onSwitchToLogin }: 
 
         <div className="text-xs text-[var(--text-muted)] border-t border-[var(--ui-border-soft)] pt-3 space-y-1">
           <p>
-            {t('tokenActivation.hint', '激活成功后，请关闭分镜大师旅游版并重新启动，即可正常使用。')}
+            {t('tokenActivation.hint', '激活成功后，请关闭小鸭服饰版并重新启动，即可正常使用。')}
           </p>
           {onSwitchToLogin && (
             <button

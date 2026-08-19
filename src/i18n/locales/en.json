@@ -1,7 +1,7 @@
 {
   "app": {
-    "title": "Storyboard ShortVideo",
-    "subtitle": "ShortVideo"
+    "title": "Storyboard Fashion",
+    "subtitle": "Fashion"
   },
   "common": {
     "save": "Save",
@@ -398,7 +398,7 @@
     "providerApiKeyGuideMiddle": " to use Xiaoya generation features",
     "getApiKeyLink": "",
     "missingAnyApiKeyMessage": "Please restart the Storyboard Master to complete activation.",
-    "aboutAppName": "Storyboard ShortVideo",
+    "aboutAppName": "Storyboard Fashion",
     "aboutIntro": "A node-canvas-based AI short video workstation for image generation, editing, and short video creation.",
     "aboutVersionLabel": "Version",
     "aboutVersionUnknown": "Unknown",
@@ -523,7 +523,7 @@
     "mustAgreeToTerms": "Please read and agree to the User Notice first"
   },
   "tokenActivation": {
-    "title": "Activate Storyboard ShortVideo",
+    "title": "Activate Storyboard Fashion",
     "enterToken": "Please enter the token",
     "goToPortal": "Go to API Portal to get token →",
     "activating": "Activating...",
@@ -555,10 +555,11 @@
     "send": "Send",
     "sending": "Sending...",
     "inspiration": "💡 Trending Ideas",
+    "uploadImage": "Upload Image",
     "inspirationConfirm": "AI will search recent trending short video styles based on your project and generate 3 tailored creative ideas.",
     "inspirationCost": "3 credits per use",
     "cancelStream": "Stop",
-    "emptyState": "Describe your idea and Xiaoya Storyboard ShortVideo will generate professional storyboard prompts",
+    "emptyState": "Describe your idea and Xiaoya Storyboard Fashion will generate professional storyboard prompts",
     "toggleOpen": "Open chat",
     "toggleClose": "Close chat",
     "videoPromptLabel": "Storyboard Prompt",

@@ -30,6 +30,7 @@ static BAIDU_VIDEO_KEY: std::sync::OnceLock<Arc<Mutex<Option<String>>>> = std::s
 static BAIDU_ACCESS_KEY: std::sync::OnceLock<Arc<Mutex<Option<String>>>> = std::sync::OnceLock::new();
 static BAIDU_SECRET_KEY: std::sync::OnceLock<Arc<Mutex<Option<String>>>> = std::sync::OnceLock::new();
 static KIE_KEY: std::sync::OnceLock<Arc<Mutex<Option<String>>>> = std::sync::OnceLock::new();
+static QIANFAN_VL_KEY: std::sync::OnceLock<Arc<Mutex<Option<String>>>> = std::sync::OnceLock::new();
 
 macro_rules! secret_getter {
     ($name:ident, $static_ref:ident) => {
@@ -73,6 +74,8 @@ secret_setter!(set_baidu_video_key, BAIDU_VIDEO_KEY);
 secret_setter!(set_baidu_access_key, BAIDU_ACCESS_KEY);
 secret_setter!(set_baidu_secret_key, BAIDU_SECRET_KEY);
 secret_getter!(get_baidu_video_key, BAIDU_VIDEO_KEY);
+secret_setter!(set_qianfan_vl_key, QIANFAN_VL_KEY);
+secret_getter!(get_qianfan_vl_key, QIANFAN_VL_KEY);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRequest {
@@ -2166,6 +2169,12 @@ pub async fn banana_update_local_api_keys(
             "baidu_sk" | "BAIDU_SK" => {
                 info!("存储百度云SecretKey: {}", config.id);
                 set_baidu_secret_key(config.api_key.clone()).await;
+                continue;
+            },
+            // 千帆 ERNIE-VL 多模态读图密钥（独立于百度 VOD，千帆大模型平台单独授权）
+            "qianfan_vl" | "QIANFAN_VL" | "ernie_vl" | "ERNIE_VL" => {
+                info!("存储千帆VL读图密钥: {}", config.id);
+                set_qianfan_vl_key(config.api_key.clone()).await;
                 continue;
             },
             _ => {

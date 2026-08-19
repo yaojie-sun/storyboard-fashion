@@ -925,7 +925,7 @@ export function SettingsDialog({
                   <div className="rounded-lg border border-border-dark bg-bg-dark p-6">
                     <div className="text-center mb-6">
                       <p className="text-lg font-semibold text-text-dark">
-                        小鸭分镜大师旅游版
+                        {t('settings.aboutAppName', '小鸭服饰版')}
                       </p>
                       <p className="text-sm text-text-muted mt-1">
                         内部测试版 {_appVersion || t('settings.aboutVersionUnknown', '未知')}

@@ -1,4 +1,5 @@
 pub mod deepseek;
+pub mod describe;
 pub mod error;
 pub mod providers;
 

@@ -141,7 +141,7 @@ function App() {
       if ((window as any).__videoGenStore) {
         try {
           const s = (window as any).__videoGenStore.getState();
-          localStorage.setItem('storyboard-travel-videogen-configs', JSON.stringify({ configs: s.configs, history: s.history }));
+          localStorage.setItem('storyboard-fashion-videogen-configs', JSON.stringify({ configs: s.configs, history: s.history }));
         } catch {}
       }
     };

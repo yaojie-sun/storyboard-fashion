@@ -51,7 +51,7 @@ interface VideoGenStoreState {
   reset: () => void;
 }
 
-const STORE_KEY = 'storyboard-shortvideo-videogen-configs';
+const STORE_KEY = 'storyboard-fashion-videogen-configs';
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
