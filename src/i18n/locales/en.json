@@ -659,6 +659,8 @@
     "goRecharge": "Recharge",
     "confirmGenerate": "Generate",
     "resuming": "Resuming previous video generation...",
+    "queued": "Queued, please wait...",
+    "queuedHint": "High task volume — waiting for compute allocation",
     "pollTimeout": "Video generation timed out, credits refunded. Please try again later."
   },
   "consumption": {

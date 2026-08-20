@@ -657,6 +657,8 @@
     "goRecharge": "去充值",
     "confirmGenerate": "确认生成",
     "resuming": "正在恢复之前的视频生成任务...",
+    "queued": "排队中，请稍候...",
+    "queuedHint": "当前任务较多，正在等待分配算力",
     "pollTimeout": "视频生成超时，积分已返还，请稍后重试"
   },
   "consumption": {
