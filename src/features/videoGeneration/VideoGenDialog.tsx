@@ -10,9 +10,8 @@ import { useAssetStore } from '@/stores/assetStore';
 import { resolveImageDisplayUrl, imageUrlToDataUrl } from '@/features/canvas/application/imageData';
 import { bananaSubmitVideoJob, bananaPollVideoJob, bananaCheckCredits, bananaReportUsage, bananaRefundCredits } from '@/commands/ai';
 import { enhanceVideo } from '@/commands/enhance';
-import { cleanVideoPrompt } from '@/commands/chat';
 import { RechargeDialog } from '@/components/RechargeDialog';
-import { UiModal, UiChipButton, UiButton } from '@/components/ui';
+import { UiModal, UiChipButton } from '@/components/ui';
 import { StoryboardPromptPicker } from './StoryboardPromptPicker';
 import { useVideoGenStore } from './videoGenStore';
 import { inferRefTypes, REF_TYPE_LABELS } from './refTypes';
@@ -43,26 +42,21 @@ interface DialogPayload {
   nodeId: string | null;
   initialImages: ReferenceImage[];
   initialGridFrames: string[];
-  gridImageUrl?: string;
   shotFrameMap?: Record<string, unknown>;
 }
 
 // ── Outer shell — only event listener, NO store subscriptions ──
 
 /**
- * 解析万相Wan2.7错误码，返回用户友好提示。
- * 错误来源：Rust端 `[WAN_xxx]` 前缀 + DashScope API 返回的code/message。
+ * 解析视频生成错误码，返回用户友好提示。
  * 频率最高：绿网（内容安全审核），需突出显示。
  */
-function translateWanError(errorMsg: string): { title: string; detail: string } {
+function translateVideoError(errorMsg: string): { title: string; detail: string } {
   const msg = errorMsg || '';
   // 本地操作（超分等）的错误直接透传，不走云端错误翻译
   if (msg.startsWith('[LOCAL]')) {
     return { title: '本地处理失败', detail: msg.slice(7).trim() };
   }
-  // 提取 [WAN_xxx] 错误码（Rust端注入）
-  const codeMatch = msg.match(/\[WAN_([^\]]+)\]/);
-  const code = codeMatch?.[1] || '';
   const lower = msg.toLowerCase();
 
   // —— 内容安全审核（最高频） ——
@@ -72,7 +66,7 @@ function translateWanError(errorMsg: string): { title: string; detail: string } 
     'green net', 'greennet', '100008', '100009', '100010',
     'moderation', 'rejected',
   ];
-  if (绿网Keywords.some(k => lower.includes(k)) || 绿网Keywords.some(k => code.toLowerCase().includes(k))) {
+  if (绿网Keywords.some(k => lower.includes(k))) {
     return {
       title: '内容安全审核未通过',
       detail: '本次生成的视频画面触发了网络安全审核。请返回Chat修改分镜提示词，调整画面描述后重新生成宫格图，再试一次。\n\n常见触发场景：裸露、血腥暴力、政治敏感、枪支武器、成人用品等。',
@@ -88,7 +82,7 @@ function translateWanError(errorMsg: string): { title: string; detail: string } 
   }
 
   // —— 参数错误 ——
-  if (lower.includes('invalidparameter') || lower.includes('参数') || code.includes('InvalidParameter')) {
+  if (lower.includes('invalidparameter') || lower.includes('参数')) {
     return {
       title: '视频参数有误',
       detail: '视频生成参数不合法。可能是分辨率、时长或参考图格式异常。请检查配置后重试。若持续出现，请联系客服。',
@@ -104,7 +98,7 @@ function translateWanError(errorMsg: string): { title: string; detail: string } 
   }
 
   // —— 服务端错误 ——
-  if (lower.includes('internal') || lower.includes('500') || code.includes('internal_error')) {
+  if (lower.includes('internal') || lower.includes('500')) {
     return {
       title: '服务器繁忙',
       detail: '视频生成服务暂时异常，请稍后重试。积分已返还。',
@@ -122,7 +116,7 @@ function translateWanError(errorMsg: string): { title: string; detail: string } 
   // —— 未知错误（显示原始信息） ——
   return {
     title: '视频生成失败',
-    detail: msg.replace(/\[WAN_[^\]]+\]\s*/g, '').trim() || '未知错误，请稍后重试。',
+    detail: msg.trim() || '未知错误，请稍后重试。',
   };
 }
 
@@ -185,7 +179,7 @@ export function VideoGenDialog() {
           }
         }
 
-        // 直接调入宫格图，不分割（万相故事板模式）
+        // 直接调入宫格图作为参考图，不分割
         if (gridImageUrl) {
           addImage(gridImageUrl);
         } else {
@@ -201,7 +195,6 @@ export function VideoGenDialog() {
         nodeId: p.nodeId ?? null,
         initialImages: images.slice(0, 5),
         initialGridFrames: gridFrames,
-        gridImageUrl,
         shotFrameMap,
       });
       setIsOpen(true);
@@ -217,7 +210,6 @@ export function VideoGenDialog() {
         nodeId={payload.nodeId}
         initialImages={payload.initialImages}
         initialGridFrames={payload.initialGridFrames}
-        gridImageUrl={payload.gridImageUrl}
         shotFrameMap={payload.shotFrameMap}
         onClose={handleClose}
       />
@@ -232,14 +224,12 @@ function VideoGenDialogInner({
   nodeId,
   initialImages,
   initialGridFrames,
-  gridImageUrl,
   shotFrameMap: _shotFrameMap, // 保留但不再注入图N引用
   onClose,
 }: {
   nodeId: string | null;
   initialImages: ReferenceImage[];
   initialGridFrames: string[];
-  gridImageUrl?: string;
   shotFrameMap?: Record<string, unknown>;
   onClose: () => void;
 }) {
@@ -297,7 +287,7 @@ function VideoGenDialogInner({
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [resolution, setResolution] = useState<VideoResolution>('720P');
   const [duration, setDuration] = useState<VideoDuration>(4);
-  const [videoModel] = useState<string>('happyhorse/happyhorse-1.1-r2v');
+  const [videoModel] = useState<string>('minimax/minimax-h3');
   const [prompt, setPrompt] = useState('');
   const [gridFrames, setGridFrames] = useState<string[]>(initialGridFrames);
 
@@ -349,15 +339,9 @@ function VideoGenDialogInner({
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
+  const [pollStatus, setPollStatus] = useState<'queued' | 'running' | null>(null);
   const [isLocalEnhancing, setIsLocalEnhancing] = useState(false);
   const [localEnhanceProgress, setLocalEnhanceProgress] = useState(0); // 0-100
-  const [showLocalEnhanceConfirm, setShowLocalEnhanceConfirm] = useState(false);
-  const [isUpscaling, setIsUpscaling] = useState(false);
-  const [upscaleTarget, setUpscaleTarget] = useState<'2K' | '4K' | null>(null);
-  const [showUpscaleConfirm, setShowUpscaleConfirm] = useState(false);
-  const enhanceSuppressVideoConfirmRef = useRef(
-    localStorage.getItem('enhance:suppressVideoConfirm') === '1',
-  );
   const [error, setError] = useState<string | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   const submitParamsRef = useRef<{ aspectRatio: string; duration: number; videoModel: string; refUrls: string[]; negativePrompt?: string } | null>(null);
@@ -404,6 +388,11 @@ function VideoGenDialogInner({
         try {
           const pollResult = await bananaPollVideoJob(taskId, deducted, modelName);
           if (controller.signal.aborted) return;
+          if (pollResult.status === 'queued') {
+            setPollStatus('queued');
+          } else if (pollResult.status === 'running') {
+            setPollStatus('running');
+          }
           if (pollResult.status === 'succeeded' && pollResult.videoUrl) {
             setVideoUrl(pollResult.videoUrl);
             // 自动下载视频到本地，优先使用本地路径
@@ -418,12 +407,15 @@ function VideoGenDialogInner({
             } catch (downloadErr) {
               console.warn('[VideoGenDialog] auto-download failed:', downloadErr);
             }
+            // 生成后自动本地超分到 2K
+            const finalVideoPath = await autoEnhanceTo2K(localVideoPath);
+            setVideoUrl(finalVideoPath);
             const config = {
               prompt: prompt.trim() || '',
               aspectRatio,
               duration,
               videoModel,
-              videoUrl: localVideoPath,
+              videoUrl: finalVideoPath,
               referenceImageUrls: referenceImages.map(({ id, rawUrl, url }) => ({ id, rawUrl, url })),
               referenceVoice: referenceVoice ?? undefined,
               gridFrames: gridFrames.length > 0 ? gridFrames : undefined,
@@ -436,13 +428,13 @@ function VideoGenDialogInner({
               // 更新画布节点数据，让视频在节点上可见
               try {
                 useCanvasStore.getState().updateNodeData(nodeIdRef.current, {
-                  generatedVideoUrl: localVideoPath,
+                  generatedVideoUrl: finalVideoPath,
                 });
               } catch { /* non-critical */ }
             }
             setIsGenerating(false);
             setIsResuming(false);
-            bananaReportUsage({ api_type: 'pixverse_c1', is_success: true, cost_credits: deducted, response_time_ms: Date.now() - startTime, category: 'video_generation', image_size: aspectRatio, duration_seconds: duration, prompt_len: prompt.length, error_message: '' }).catch(() => {});
+            bananaReportUsage({ api_type: 'minimax_h3', is_success: true, cost_credits: deducted, response_time_ms: Date.now() - startTime, category: 'video_generation', image_size: aspectRatio, duration_seconds: duration, prompt_len: prompt.length, error_message: '' }).catch(() => {});
             return;
           }
           if (pollResult.status === 'failed' || pollResult.status === 'retry') {
@@ -477,7 +469,7 @@ function VideoGenDialogInner({
             setError(t('videoGen.pollTimeout', '视频生成超时，积分已返还，请稍后重试'));
             setIsGenerating(false);
             setIsResuming(false);
-            bananaReportUsage({ api_type: 'pixverse_c1', is_success: false, cost_credits: deducted, response_time_ms: Date.now() - startTime, category: 'video_generation', image_size: aspectRatio, duration_seconds: duration, prompt_len: prompt.length, error_message: 'timeout' }).catch(() => {});
+            bananaReportUsage({ api_type: 'minimax_h3', is_success: false, cost_credits: deducted, response_time_ms: Date.now() - startTime, category: 'video_generation', image_size: aspectRatio, duration_seconds: duration, prompt_len: prompt.length, error_message: 'timeout' }).catch(() => {});
             return;
           }
         } catch (e) {
@@ -488,7 +480,7 @@ function VideoGenDialogInner({
           setError(t('videoGen.networkError', '网络异常，积分已返还，请检查网络后重试'));
           setIsGenerating(false);
           setIsResuming(false);
-          bananaReportUsage({ api_type: 'pixverse_c1', is_success: false, cost_credits: deducted, response_time_ms: Date.now() - startTime, category: 'video_generation', image_size: aspectRatio, duration_seconds: duration, prompt_len: prompt.length, error_message: 'network_error' }).catch(() => {});
+          bananaReportUsage({ api_type: 'minimax_h3', is_success: false, cost_credits: deducted, response_time_ms: Date.now() - startTime, category: 'video_generation', image_size: aspectRatio, duration_seconds: duration, prompt_len: prompt.length, error_message: 'network_error' }).catch(() => {});
           return;
         }
       }
@@ -507,8 +499,8 @@ function VideoGenDialogInner({
       // PixVerse/BP tasks expire across sessions — don't auto-resume
       // Only PixVerse/BP (non-happyhorse) tsk- tasks expire across sessions.
       // HappyHorse 1.1 via BaiduVOD also uses tsk- prefix — these MUST auto-resume.
-      const isHappyhorseTask = savedConfig?.videoModel?.includes('happyhorse');
-      if (pid.startsWith('tsk-') && !isHappyhorseTask) {
+      const isResumableTask = savedConfig?.videoModel?.includes('happyhorse') || savedConfig?.videoModel?.includes('minimax');
+      if (pid.startsWith('tsk-') && !isResumableTask) {
         console.log('[VideoGenDialog] skipping PixVerse resume (task expires across sessions)');
         setPendingTaskId(null);
         return;
@@ -516,12 +508,15 @@ function VideoGenDialogInner({
       const resumeModel = savedConfig?.videoModel
         ? (savedConfig.videoModel.includes('happyhorse')
             ? 'happyhorse/happyhorse-1.1-r2v'
-            : savedConfig.videoModel.includes('pixverse')
-              ? 'pixverse/c1'
-              : 'wan/wan2.7-r2v')
+            : savedConfig.videoModel.includes('minimax')
+              ? 'minimax/minimax-h3'
+              : savedConfig.videoModel.includes('pixverse')
+                ? 'pixverse/c1'
+                : 'minimax/minimax-h3')
         : undefined;
       setIsResuming(true);
       setIsGenerating(true);
+      setPollStatus(null);
       startPolling(pid, true, savedConfig?.pendingCreditsDeducted ?? 0, resumeModel);
     }
     // 组件卸载时中止轮询，防止旧轮询循环在后台继续运行
@@ -534,8 +529,8 @@ function VideoGenDialogInner({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isHappyhorse = videoModel.includes('happyhorse');
-  const isWan = videoModel.includes('wan');
   const isPixverse = videoModel.includes('pixverse');
+  const isMinimax = videoModel.includes('minimax');
 
   const handleClose = useCallback(() => {
     onClose();
@@ -701,31 +696,18 @@ function VideoGenDialogInner({
 
     setIsGenerating(true);
     setVideoUrl(null);
+    setPollStatus(null);
 
     try {
       // 1. 获取规则文件
       const rules = await fetchVideoGenRules(videoModel);
 
-      // 2. DeepSeek 清洗：去掉光影/场景/外观，只保留运镜+精简动作+声音
-      //    确保文字描述不超出宫格图已锚定的画面内容（第3锁）
+      // 2. H3 用自然语言，无需 DeepSeek 二次清洗（原欢乐马清洗器已移除）
       let userContent = trimmedPrompt;
-      if (isWan || isHappyhorse) {
-        try {
-          userContent = await cleanVideoPrompt({
-            storyboardPrompt: trimmedPrompt,
-            gridFrames,
-            targetModel: isHappyhorse ? 'happyhorse' : 'wan',
-            referenceImages: referenceImages.map(img => img.rawUrl),
-          });
-          console.log('[VideoGenDialog] DeepSeek cleaned prompt:', userContent.length, 'chars (was:', trimmedPrompt.length, 'chars)');
-        } catch (e) {
-          console.warn('[VideoGenDialog] DeepSeek cleaning failed, using original prompt:', e);
-        }
-      }
 
       // 2.5 shotFrameMap 保留在节点缓存中（用于后续分析/调试），
       // 但不再注入图N引用到 prompt。
-      // 官方文档：Wan2.7 R2V 自动识别宫格逻辑，"无需描述每个宫格"。
+      // 官方文档：欢乐马自动识别宫格逻辑，"无需描述每个宫格"。
       // 让模型从整张六宫格图中自行匹配帧，避免指定图N干扰模型判断。
 
       let finalPrompt: string;
@@ -736,41 +718,28 @@ function VideoGenDialogInner({
       const guidanceScale = rules.guidance_scale;
       const shotType = rules.shot_type;
 
-      // Wan 模型画面锁定尾句（代码层 100% 可靠追加，AI 无法遗忘）
+      // 欢乐马模型画面锁定尾句（代码层 100% 可靠追加，AI 无法遗忘）
       finalPrompt = promptRule
         ? `${promptRule}\n\n${userContent}`
         : userContent;
-      console.log(`[VideoGenDialog] ${isPixverse ? 'PixVerse' : isWan ? 'Wan' : 'HappyHorse'}, refs:`, referenceImages.length, 'hasRule:', !!promptRule, 'hasNegPrompt:', !!negativePrompt, 'guidanceScale:', guidanceScale, 'shotType:', shotType, 'promptLen:', finalPrompt.length);
+      console.log(`[VideoGenDialog] ${isMinimax ? 'MiniMax H3' : isPixverse ? 'PixVerse' : 'HappyHorse'}, refs:`, referenceImages.length, 'hasRule:', !!promptRule, 'hasNegPrompt:', !!negativePrompt, 'guidanceScale:', guidanceScale, 'shotType:', shotType, 'promptLen:', finalPrompt.length);
 
-      // 4. 准备参考图 — 直接用 base64
+      // 4. 准备参考图 — 直接用 base64（欢乐马：传入参考图）
       const imageInput: string[] = [];
-      if (isWan && gridImageUrl) {
-        // 万相：直接传入整张六宫格大图（不拆分）
+      for (const img of referenceImages) {
         try {
-          const dataUrl = gridImageUrl.startsWith('data:')
-            ? gridImageUrl
-            : await imageUrlToDataUrl(resolveImageDisplayUrl(gridImageUrl));
+          const dataUrl = img.rawUrl.startsWith('data:')
+            ? img.rawUrl
+            : await imageUrlToDataUrl(img.url);
           imageInput.push(dataUrl);
         } catch (e) {
-          console.warn('[VideoGenDialog] Wan: failed to convert grid image:', gridImageUrl, e);
-        }
-      } else {
-        // 欢乐马：传入拆分后的六张独立参考图
-        for (const img of referenceImages) {
-          try {
-            const dataUrl = img.rawUrl.startsWith('data:')
-              ? img.rawUrl
-              : await imageUrlToDataUrl(img.url);
-            imageInput.push(dataUrl);
-          } catch (e) {
-            console.warn('[VideoGenDialog] failed to convert to base64:', img.rawUrl, e);
-          }
+          console.warn('[VideoGenDialog] failed to convert to base64:', img.rawUrl, e);
         }
       }
 
       // 准备音色参考 audio data URL
       let voiceUrl: string | undefined;
-      if (referenceVoice && (isHappyhorse || isWan)) {
+      if (referenceVoice && isHappyhorse) {
         try {
           const rawUrl = referenceVoice.rawUrl;
           if (rawUrl.startsWith('data:')) {
@@ -802,11 +771,7 @@ function VideoGenDialogInner({
         negativePrompt: negativePrompt || undefined,
         guidanceScale,
         shotType,
-        model: isHappyhorse
-          ? 'happyhorse/happyhorse-1.1-r2v'
-          : isPixverse
-            ? 'pixverse/c1'
-            : 'wan/wan2.7-r2v',
+        model: videoModel,
       });
 
       if (result.success) {
@@ -834,12 +799,15 @@ function VideoGenDialogInner({
           } catch (downloadErr) {
             console.warn('[VideoGenDialog] sync video download failed:', downloadErr);
           }
+          // 生成后自动本地超分到 2K
+          const finalVideoPath = await autoEnhanceTo2K(syncVideoPath);
+          setVideoUrl(finalVideoPath);
           const config = {
             prompt: prompt.trim() || '',
             aspectRatio,
             duration,
             videoModel,
-            videoUrl: syncVideoPath,
+            videoUrl: finalVideoPath,
             referenceImageUrls: referenceImages.map(({ id, rawUrl, url }) => ({ id, rawUrl, url })),
             referenceVoice: referenceVoice ?? undefined,
             gridFrames: gridFrames.length > 0 ? gridFrames : undefined,
@@ -849,7 +817,7 @@ function VideoGenDialogInner({
             addToHistory(nodeIdRef.current, config, result.taskId || undefined);
             try {
               useCanvasStore.getState().updateNodeData(nodeIdRef.current, {
-                generatedVideoUrl: syncVideoPath,
+                generatedVideoUrl: finalVideoPath,
               });
             } catch { /* non-critical */ }
           }
@@ -867,11 +835,7 @@ function VideoGenDialogInner({
               referenceImageUrls: referenceImages.map(({ id, rawUrl, url }) => ({ id, rawUrl, url })),
             });
           }
-          startPolling(result.taskId, false, deducted, isHappyhorse
-            ? 'happyhorse/happyhorse-1.1-r2v'
-            : isPixverse
-              ? 'pixverse/c1'
-              : 'wan/wan2.7-r2v');
+          startPolling(result.taskId, false, deducted, videoModel);
         } else {
           setIsGenerating(false);
           setError(t('videoGen.unknownError', '未知错误'));
@@ -903,11 +867,10 @@ function VideoGenDialogInner({
     };
   }, []);
 
-  const handleLocalEnhance = useCallback(async () => {
-    if (!videoUrl) return;
+  // 生成完成后自动本地超分到 2K（失败则回退到原视频，不阻塞用户）
+  const autoEnhanceTo2K = useCallback(async (localVideoPath: string): Promise<string> => {
     setIsLocalEnhancing(true);
     setLocalEnhanceProgress(0);
-    setError(null);
     // 模拟进度条：0→90% 约 3 分钟，完成后跳到 100%
     const progressTimer = setInterval(() => {
       setLocalEnhanceProgress(prev => {
@@ -917,41 +880,17 @@ function VideoGenDialogInner({
       });
     }, 2500);
     try {
-      const result = await enhanceVideo(videoUrl, 2);
+      const result = await enhanceVideo(localVideoPath, 2);
       setLocalEnhanceProgress(100);
-      setVideoUrl(result);
-      // 立即持久化，不走防抖，避免关弹窗丢数据
-      const existingCfg = useVideoGenStore.getState().configs[nodeIdRef.current!];
-      saveConfig(nodeIdRef.current!, {
-        prompt,
-        aspectRatio,
-        resolution,
-        duration,
-        videoModel,
-        videoUrl: result,
-        referenceImageUrls: referenceImages.map(({ id, rawUrl, url }) => ({ id, rawUrl, url })),
-        referenceVoice: referenceVoice ?? existingCfg?.referenceVoice,
-        gridFrames: gridFrames.length > 0 ? gridFrames : existingCfg?.gridFrames,
-      });
-      if (nodeIdRef.current) {
-        addToHistory(nodeIdRef.current, {
-          prompt: '【本地4K】' + (prompt?.trim() || ''),
-          aspectRatio,
-          duration,
-          videoModel,
-          videoUrl: result,
-          referenceImageUrls: referenceImages.map(({ id, rawUrl, url }) => ({ id, rawUrl, url })),
-          referenceVoice: referenceVoice ?? undefined,
-          gridFrames: gridFrames.length > 0 ? gridFrames : undefined,
-        });
-      }
+      return result;
     } catch (e: any) {
-      setError('[LOCAL] ' + (e?.message || String(e)));
+      console.warn('[VideoGenDialog] auto 2K enhance failed, fallback to original:', e);
+      return localVideoPath;
     } finally {
       clearInterval(progressTimer);
       setIsLocalEnhancing(false);
     }
-  }, [videoUrl, prompt, aspectRatio, duration, videoModel, referenceImages, referenceVoice, gridFrames, addToHistory]);
+  }, [enhanceVideo]);
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -1161,7 +1100,7 @@ function VideoGenDialogInner({
                 )}
               </div>
 
-              {/* 音色参考上传（Wan2.7 支持配音） */}
+              {/* 音色参考上传 */}
               <div className="mt-4">
                 <label className="mb-1.5 block text-xs font-medium text-text-muted">
                   {t('videoGen.voiceRef', '音质参考（可选）')}
@@ -1211,7 +1150,7 @@ function VideoGenDialogInner({
         {/* Right panel: preview */}
         <div className="flex flex-1 flex-col items-center justify-center p-6">
           {isLocalEnhancing && videoUrl ? (
-            /* 本地4K超分 — 视频上叠加进度蒙版 */
+            /* 本地超分到2K — 视频上叠加进度蒙版 */
             <div className="relative">
               <video
                 src={displayVideoUrl ?? undefined}
@@ -1222,7 +1161,7 @@ function VideoGenDialogInner({
               />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-bg-dark/65">
                 <div className="w-56 space-y-3">
-                  <p className="text-center text-sm font-medium text-white">正在本地生成4K视频...</p>
+                  <p className="text-center text-sm font-medium text-white">正在生成2K视频...</p>
                   <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/15">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700 ease-out"
@@ -1245,7 +1184,7 @@ function VideoGenDialogInner({
               autoPlay
               loop
             />
-          ) : isGenerating || isUpscaling ? (
+          ) : isGenerating ? (
             <div className="flex flex-col items-center gap-6">
               <div className="relative">
                 <div className="absolute inset-0 animate-ping rounded-full border-2 border-purple-400/30" />
@@ -1254,14 +1193,14 @@ function VideoGenDialogInner({
               </div>
               <div className="flex flex-col items-center gap-2">
                 <p className="text-sm font-medium text-text-dark">
-                  {isUpscaling
-                    ? `正在生成${upscaleTarget}视频...`
-                    : isResuming
-                      ? t('videoGen.resuming', '正在恢复之前的视频生成任务...')
+                  {isResuming
+                    ? t('videoGen.resuming', '正在恢复之前的视频生成任务...')
+                    : pollStatus === 'queued'
+                      ? t('videoGen.queued', '排队中，请稍候...')
                       : t('videoGen.generating', '正在生成视频...')}
                 </p>
                 <span className="inline-flex items-center gap-1 text-xs text-text-muted">
-                  {isUpscaling ? '预计需要 1–3 分钟' : isResuming ? '小鸭正在处理中，请耐心等待...' : '预计需要 30–60 秒'}
+                  {isResuming ? '小鸭正在处理中，请耐心等待...' : pollStatus === 'queued' ? t('videoGen.queuedHint', '当前任务较多，正在等待分配算力') : '预计需要 30–60 秒'}
                   <span className="inline-flex items-center">
                     <span className="mx-0.5 h-1 w-1 animate-bounce rounded-full bg-purple-400" style={{ animationDelay: '0ms' }} />
                     <span className="mx-0.5 h-1 w-1 animate-bounce rounded-full bg-purple-400" style={{ animationDelay: '150ms' }} />
@@ -1408,61 +1347,17 @@ function VideoGenDialogInner({
                 <Sparkles className="h-3.5 w-3.5" />
                 {isResuming
                   ? t('videoGen.resuming', '正在恢复...')
-                  : t('videoGen.generate', '生成视频')}
+                  : t('videoGen.generate', '生成视频（2K）')}
               </button>
             </div>
           </div>
 
-          {/* 超分按钮 — 云端 + 本地 */}
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (!videoUrl) { setError('请先生成视频，再生成高分辨率版本'); return; }
-                setUpscaleTarget('2K'); setShowUpscaleConfirm(true);
-              }}
-              disabled={isGenerating || isUpscaling || isLocalEnhancing}
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-purple-400/30 bg-purple-500/10 px-3 text-xs font-medium text-purple-300 transition-colors hover:bg-purple-500/20 disabled:opacity-40"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              云端 2K (-20积分)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!videoUrl) { setError('请先生成视频，再生成高分辨率版本'); return; }
-                setUpscaleTarget('4K'); setShowUpscaleConfirm(true);
-              }}
-              disabled={isGenerating || isUpscaling || isLocalEnhancing}
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/20 disabled:opacity-40"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              云端 4K (-35积分)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!videoUrl) { setError('请先生成视频'); return; }
-                if (enhanceSuppressVideoConfirmRef.current) {
-                  void handleLocalEnhance();
-                } else {
-                  setShowLocalEnhanceConfirm(true);
-                }
-              }}
-              disabled={isGenerating || isUpscaling || isLocalEnhancing}
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              {isLocalEnhancing ? '本地生成4K中...' : '本地 4K (免费)'}
-            </button>
-          </div>
-
           {error && (() => {
-            const wanErr = translateWanError(error);
+            const videoErr = translateVideoError(error);
             return (
               <div className="mt-3 max-w-md rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-left">
-                <p className="text-sm font-semibold text-red-400">{wanErr.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-red-300/80 whitespace-pre-wrap">{wanErr.detail}</p>
+                <p className="text-sm font-semibold text-red-400">{videoErr.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-red-300/80 whitespace-pre-wrap">{videoErr.detail}</p>
               </div>
             );
           })()}
@@ -1645,111 +1540,6 @@ function VideoGenDialogInner({
           </div>
         </div>
       )}
-
-
-      {/* 云端超分确认弹窗 */}
-      <UiModal
-        isOpen={showUpscaleConfirm}
-        title={`云端生成${upscaleTarget}视频`}
-        onClose={() => setShowUpscaleConfirm(false)}
-        widthClassName="w-[400px]"
-        footer={
-          <div className="flex gap-2 w-full">
-            <UiButton variant="muted" size="sm" onClick={() => setShowUpscaleConfirm(false)} className="flex-1">
-              取消
-            </UiButton>
-            <UiButton variant="primary" size="sm" onClick={async () => {
-              setShowUpscaleConfirm(false);
-              if (!upscaleTarget || !videoUrl) return;
-              setIsUpscaling(true);
-              setError(null);
-              try {
-                const { baiduUpscaleVideo } = await import('@/commands/ai');
-                const result = await baiduUpscaleVideo(videoUrl, upscaleTarget);
-                setVideoUrl(result);
-                if (nodeIdRef.current) {
-                  const label = upscaleTarget === '2K' ? '【2K视频】' : '【4K视频】';
-                  addToHistory(nodeIdRef.current, {
-                    prompt: label + (prompt?.trim() || ''),
-                    aspectRatio,
-                    duration,
-                    videoModel,
-                    videoUrl: result,
-                    referenceImageUrls: referenceImages.map(({ id, rawUrl, url }) => ({ id, rawUrl, url })),
-                    referenceVoice: referenceVoice ?? undefined,
-                    gridFrames: gridFrames.length > 0 ? gridFrames : undefined,
-                  });
-                }
-              } catch (e: any) {
-                setError(e?.message || String(e));
-              } finally {
-                setIsUpscaling(false);
-              }
-            }} className="flex-1">
-              确认
-            </UiButton>
-          </div>
-        }
-      >
-        <div className="text-center py-4">
-          <p className="text-sm text-text-dark">
-            将当前视频超分为{upscaleTarget}分辨率，消耗{upscaleTarget === '2K' ? '20' : '35'}积分，处理需要 1-3 分钟。
-          </p>
-        </div>
-      </UiModal>
-
-      {/* 本地超分硬件要求确认弹窗 */}
-      <UiModal
-        isOpen={showLocalEnhanceConfirm}
-        title="本地视频超分"
-        onClose={() => setShowLocalEnhanceConfirm(false)}
-        widthClassName="w-[420px]"
-        footer={
-          <div className="flex gap-2 w-full">
-            <UiButton variant="muted" size="sm" onClick={() => setShowLocalEnhanceConfirm(false)} className="flex-1">
-              取消
-            </UiButton>
-            <UiButton variant="primary" size="sm" onClick={() => {
-              setShowLocalEnhanceConfirm(false);
-              void handleLocalEnhance();
-            }} className="flex-1 !bg-emerald-600 hover:!bg-emerald-500">
-              继续
-            </UiButton>
-          </div>
-        }
-      >
-        <div className="space-y-3 py-2 text-sm text-text-muted">
-          <p className="font-medium text-text-dark">此功能使用本地 GPU 进行 AI 视频超分增强</p>
-          <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-bg-dark p-3">
-            <p className="font-medium text-text-dark mb-2">最低硬件要求：</p>
-            <ul className="list-disc space-y-1 pl-4 text-xs">
-              <li>支持 Vulkan 1.1+ 的显卡</li>
-              <li>NVIDIA GTX 1060 / AMD RX 580 / Intel Arc 及以上</li>
-              <li>至少 2GB 显存（4GB 推荐）</li>
-            </ul>
-          </div>
-          <p className="text-xs leading-relaxed">
-            处理时间取决于视频时长和 GPU 性能，通常需要 2-5 分钟。
-            处理期间请勿关闭窗口。
-          </p>
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              className="h-3.5 w-3.5 rounded accent-emerald-500"
-              defaultChecked={enhanceSuppressVideoConfirmRef.current}
-              onChange={(e) => {
-                enhanceSuppressVideoConfirmRef.current = e.currentTarget.checked;
-                if (e.currentTarget.checked) {
-                  localStorage.setItem('enhance:suppressVideoConfirm', '1');
-                } else {
-                  localStorage.removeItem('enhance:suppressVideoConfirm');
-                }
-              }}
-            />
-            <span>以后不再提示</span>
-          </label>
-        </div>
-      </UiModal>
     </div>
   );
 }

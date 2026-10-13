@@ -1,9 +1,13 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
+use tokio::sync::{Mutex as TokioMutex, OnceCell as TokioOnceCell};
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,12 +98,31 @@ pub fn add_asset(
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png");
-    let dest_file_name = format!("{}-{}.{}", id, &file_name, ext);
+
+    // 大图（最长边 > 2048 或体积 > 5MB）先压缩再落盘，避免原图过大拖慢宫格/画布加载；
+    // 小图原样保留，压缩/解码失败则原样保存兜底，不阻塞上传。
+    let src_bytes = std::fs::read(&source_path)
+        .map_err(|e| format!("Failed to read asset file: {}", e))?;
+    let (out_bytes, out_ext) = match crate::ai::describe::compress_for_upload(&src_bytes) {
+        Ok(crate::ai::describe::UploadImage::Original(b)) => (b, ext.to_string()),
+        Ok(crate::ai::describe::UploadImage::CompressedJpeg(b)) => {
+            info!(
+                "asset {} 原图 {} bytes 已压缩为 {} bytes (jpg)",
+                id,
+                src_bytes.len(),
+                b.len()
+            );
+            (b, "jpg".to_string())
+        }
+        Err(_) => (src_bytes, ext.to_string()),
+    };
+
+    let dest_file_name = format!("{}-{}.{}", id, &file_name, out_ext);
     let dest_path = assets_dir.join(&dest_file_name);
     let dest_path_str = dest_path.to_string_lossy().to_string();
 
-    std::fs::copy(&source_path, &dest_path)
-        .map_err(|e| format!("Failed to copy asset file: {}", e))?;
+    std::fs::write(&dest_path, &out_bytes)
+        .map_err(|e| format!("Failed to write asset file: {}", e))?;
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -135,6 +158,9 @@ pub fn add_asset(
         ],
     )
     .map_err(|e| format!("Failed to insert asset: {}", e))?;
+
+    // 读图改为「生成分镜时」触发（见 chatStore.sendMessage 调 buildProjectChatContext(readIfMissing:true)），
+    // 上传只存 + 压缩，不后台读图，避免上传时读到错误/过时的图。
 
     Ok(record)
 }
@@ -244,6 +270,10 @@ pub fn delete_asset(app: AppHandle, id: String) -> Result<(), String> {
     let conn = open_db(&app)?;
     ensure_assets_table(&conn)?;
 
+    // Delete description cache (best-effort)
+    let _ = ensure_asset_descriptions_table(&conn);
+    let _ = conn.execute("DELETE FROM asset_descriptions WHERE asset_id = ?1", params![id]);
+
     let file_path: Option<String> = conn
         .query_row(
             "SELECT file_path FROM assets WHERE id = ?1",
@@ -262,4 +292,156 @@ pub fn delete_asset(app: AppHandle, id: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+// ============ 读图描述（视觉描述缓存） ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetDescription {
+    pub asset_id: String,
+    pub description: String,
+}
+
+fn ensure_asset_descriptions_table(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS asset_descriptions (
+          asset_id TEXT PRIMARY KEY,
+          file_hash TEXT NOT NULL,
+          description TEXT NOT NULL,
+          model TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        "#,
+    )
+    .map_err(|e| format!("Failed to initialize asset_descriptions table: {}", e))
+}
+
+/// 进行中的读图结果合并缓存：asset_id → 共享的读图结果。
+/// 同一 asset 的并发读图合并为一次（首个调用者读图并 set 结果，后续调用者 await 复用同一结果），
+/// 既避免重复计费，又保证等待方（前端 describe_asset 补读）也能拿到描述。
+/// 失败不缓存：读图失败时 get_or_try_init 返回 Err 且不 set，后续调用可重试。
+static IN_FLIGHT_DESCRIBES: std::sync::LazyLock<
+    TokioMutex<HashMap<String, Arc<TokioOnceCell<String>>>>,
+> = std::sync::LazyLock::new(|| TokioMutex::new(HashMap::new()));
+
+/// 读图核心逻辑：先查缓存（file_hash 命中则秒回），未命中再调 DeepSeek 视觉模型并写缓存。
+/// 幂等，可被 add_asset 的异步任务和前端 describe_asset 重复调用，不会重复产生读图费用。
+async fn describe_asset_inner(app: &AppHandle, asset_id: &str) -> Result<Option<String>, String> {
+    let api_key = crate::commands::banana_api::get_deepseek_chat_key()
+        .ok_or_else(|| "DeepSeek视觉读图API密钥未配置".to_string())?;
+
+    // 阶段一（同步）：读文件 + 查缓存。conn 必须在 await 前 drop（rusqlite Connection 非 Send）。
+    let (file_hash, bytes, cached_desc) = {
+        let conn = open_db(app)?;
+        ensure_assets_table(&conn)?;
+        ensure_asset_descriptions_table(&conn)?;
+
+        let file_path: String = conn
+            .query_row(
+                "SELECT file_path FROM assets WHERE id = ?1",
+                params![asset_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to find asset: {}", e))?;
+
+        let bytes = std::fs::read(&file_path)
+            .map_err(|e| format!("Failed to read asset file: {}", e))?;
+        let file_hash = format!("{:x}", md5::compute(&bytes));
+
+        let cached: Option<String> = conn
+            .query_row(
+                "SELECT description FROM asset_descriptions WHERE asset_id = ?1 AND file_hash = ?2",
+                params![asset_id, file_hash],
+                |row| row.get(0),
+            )
+            .ok();
+
+        (file_hash, bytes, cached)
+    };
+
+    if let Some(desc) = cached_desc {
+        return Ok(Some(desc));
+    }
+
+    // 阶段二（await）：合并并发读图。首个调用者真正调 DeepSeek 视觉模型并 set 结果，后续调用者 await 复用同一结果。
+    // 此时不持有 conn，future 保持 Send。失败不缓存，可重试。
+    let cell = {
+        let mut map = IN_FLIGHT_DESCRIBES.lock().await;
+        map.entry(asset_id.to_string())
+            .or_insert_with(|| Arc::new(TokioOnceCell::new()))
+            .clone()
+    };
+    let description: String = cell
+        .get_or_try_init(|| async {
+            crate::ai::describe::describe_image(&bytes, &api_key)
+                .await
+                .map_err(|e| e.to_string())
+        })
+        .await?
+        .clone();
+
+    // 阶段三（同步）：写缓存
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    {
+        let conn = open_db(app)?;
+        ensure_asset_descriptions_table(&conn)?;
+        conn.execute(
+            r#"
+            INSERT INTO asset_descriptions (asset_id, file_hash, description, model, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(asset_id) DO UPDATE SET
+              file_hash = ?2, description = ?3, model = ?4, updated_at = ?5
+            "#,
+            params![asset_id, file_hash, description, "deepseek-v4-flash-vision-exp", now],
+        )
+        .map_err(|e| format!("Failed to save asset description: {}", e))?;
+    }
+
+    Ok(Some(description))
+}
+
+#[tauri::command]
+pub async fn describe_asset(app: AppHandle, asset_id: String) -> Result<Option<String>, String> {
+    describe_asset_inner(&app, &asset_id).await
+}
+
+#[tauri::command]
+pub fn get_asset_descriptions(
+    app: AppHandle,
+    project_id: String,
+) -> Result<Vec<AssetDescription>, String> {
+    let conn = open_db(&app)?;
+    ensure_assets_table(&conn)?;
+    ensure_asset_descriptions_table(&conn)?;
+
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT d.asset_id, d.description
+            FROM asset_descriptions d
+            JOIN assets a ON a.id = d.asset_id
+            WHERE a.project_id = ?1
+            "#,
+        )
+        .map_err(|e| format!("Failed to prepare get descriptions: {}", e))?;
+
+    let rows = stmt
+        .query_map(params![project_id], |row| {
+            Ok(AssetDescription {
+                asset_id: row.get(0)?,
+                description: row.get(1)?,
+            })
+        })
+        .map_err(|e| format!("Failed to query descriptions: {}", e))?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(|e| format!("Failed to read description row: {}", e))?);
+    }
+    Ok(out)
 }

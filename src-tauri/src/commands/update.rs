@@ -21,11 +21,11 @@ fn resolve_video_gen_rules_url(model: Option<String>) -> String {
         .unwrap_or_else(|| crate::commands::banana_api::get_active_video_model()
             .unwrap_or_default());
     let file = match model.as_str() {
-        "happyhorse_r2v" | "happyhorse/happyhorse-1.0-r2v" | "happyhorse/happyhorse-1.1-r2v" => "video_gen_rules_fashion.json",
+        "happyhorse_r2v" | "happyhorse/happyhorse-1.1-r2v" => "video_gen_rules_fashion.json",
         "fashion_r2v" | "travel/fashion-1.0-r2v" => "video_gen_rules_fashion.json",
-        "wan_r2v" => "video_gen_rules_wan.json",
         "pixverse_c1" | "pixverse/c1" => "video_gen_rules_pixverse_c1.json",
-        _ => "video_gen_rules_wan.json",
+        "minimax" | "minimax/minimax-h3" => "video_gen_rules_minimax_h3_fashion.json",
+        _ => "video_gen_rules_fashion.json",
     };
     let url = format!("{}/{}", RULES_BASE, file);
     tracing::info!("[Rules] model={}, loading {} -> {}", model, file, url);
