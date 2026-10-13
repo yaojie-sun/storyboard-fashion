@@ -1,6 +1,7 @@
 {
   "bundle": {
     "resources": {
+      "resources/realesrgan/": "realesrgan/",
       "resources/ffmpeg/": "ffmpeg/"
     }
   }
